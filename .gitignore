@@ -1,0 +1,26 @@
+conf1/archive/
+conf2/archive/
+logs/*
+data/*
+# Ignore all .env files
+*.env
+# Except .env.example
+!.env.example
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
+# Ignore IDE specific files
+.vscode/
+.idea/
+*.iml
+# Ignore node modules
+node_modules/
+# Ignore Python cache files
+__pycache__/
+*.pyc
+# Ignore Java class files
+*.class
+
+/data/*
+/input/*
+/output/*
