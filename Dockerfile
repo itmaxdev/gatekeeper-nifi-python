@@ -15,9 +15,9 @@ RUN chmod -R 755 ${NIFI_HOME}/custom-scripts
 RUN apt-get update && apt-get install -y python3 python3-pip
 RUN pip3 install -r ${NIFI_HOME}/custom-scripts/requirements.txt
 
+# Create the 'nifi' user if it doesn't exist
+RUN id -u nifi &>/dev/null || useradd -m -d /home/nifi -s /bin/bash nifi
 
-RUN mkdir ${NIFI_HOME}/conf_bak && \
-    cp -r ${NIFI_HOME}/conf/* ${NIFI_HOME}/conf_bak/
 
 
 

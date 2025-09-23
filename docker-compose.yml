@@ -21,9 +21,9 @@ services:
       NIFI_ELECTION_MAX_WAIT: '1 min'
       NIFI_SENSITIVE_PROPS_KEY: 'MySuperSecretKey123'
     volumes:
-      - ./input:/opt/nifi/nifi-current/input
-      - ./output:/opt/nifi/nifi-current/output
-      - ./logs/node1:/opt/nifi/nifi-current/logs
+      - ${INPUT_FOLDER}:/opt/nifi/nifi-current/input
+      - ${OUTPUT_FOLDER}:/opt/nifi/nifi-current/output
+      - ${LOGS_FOLDER}/node1:/opt/nifi/nifi-current/logs
       - ./scripts:/opt/nifi/custom-scripts
       - ./conf1:/opt/nifi/nifi-current/conf
     depends_on:
@@ -45,9 +45,9 @@ services:
       NIFI_ELECTION_MAX_WAIT: '1 min'
       NIFI_SENSITIVE_PROPS_KEY: 'MySuperSecretKey123'
     volumes:
-      - ./input:/opt/nifi/nifi-current/input
-      - ./output:/opt/nifi/nifi-current/output
-      - ./logs/node2:/opt/nifi/nifi-current/logs
+      - ${INPUT_FOLDER}:/opt/nifi/nifi-current/input
+      - ${OUTPUT_FOLDER}:/opt/nifi/nifi-current/output
+      - ${LOGS_FOLDER}/node2:/opt/nifi/nifi-current/logs
       - ./scripts:/opt/nifi/custom-scripts
       - ./conf2:/opt/nifi/nifi-current/conf
     depends_on:
