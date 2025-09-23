@@ -11,7 +11,7 @@ services:
       dockerfile: Dockerfile
     container_name: nifi-node1
     ports:
-      - "8081:8080"
+      - "9106:8080"
     environment:
       NIFI_WEB_HTTP_PORT: 8080
       NIFI_CLUSTER_IS_NODE: 'true'
@@ -29,26 +29,26 @@ services:
     depends_on:
       - zookeeper
 
-  nifi-node2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: nifi-node2
-    ports:
-      - "8082:8080" # Updated external port
-    environment:
-      NIFI_WEB_HTTP_PORT: 8080 # Updated internal port
-      NIFI_CLUSTER_IS_NODE: 'true'
-      NIFI_CLUSTER_NODE_PROTOCOL_PORT: 8083
-      NIFI_CLUSTER_NODE_ADDRESS: nifi-node2
-      NIFI_ZK_CONNECT_STRING: 'zookeeper:2181'
-      NIFI_ELECTION_MAX_WAIT: '1 min'
-      NIFI_SENSITIVE_PROPS_KEY: 'MySuperSecretKey123'
-    volumes:
-      - ${INPUT_FOLDER}:/opt/nifi/nifi-current/input
-      - ${OUTPUT_FOLDER}:/opt/nifi/nifi-current/output
-      - ${LOGS_FOLDER}/node2:/opt/nifi/nifi-current/logs
-      - ./scripts:/opt/nifi/custom-scripts
-      - ./conf2:/opt/nifi/nifi-current/conf
-    depends_on:
-      - zookeeper
+  # nifi-node2:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: nifi-node2
+  #   ports:
+  #     - "8082:8080" # Updated external port
+  #   environment:
+  #     NIFI_WEB_HTTP_PORT: 8080 # Updated internal port
+  #     NIFI_CLUSTER_IS_NODE: 'true'
+  #     NIFI_CLUSTER_NODE_PROTOCOL_PORT: 8083
+  #     NIFI_CLUSTER_NODE_ADDRESS: nifi-node2
+  #     NIFI_ZK_CONNECT_STRING: 'zookeeper:2181'
+  #     NIFI_ELECTION_MAX_WAIT: '1 min'
+  #     NIFI_SENSITIVE_PROPS_KEY: 'MySuperSecretKey123'
+  #   volumes:
+  #     - ${INPUT_FOLDER}:/opt/nifi/nifi-current/input
+  #     - ${OUTPUT_FOLDER}:/opt/nifi/nifi-current/output
+  #     - ${LOGS_FOLDER}/node2:/opt/nifi/nifi-current/logs
+  #     - ./scripts:/opt/nifi/custom-scripts
+  #     - ./conf2:/opt/nifi/nifi-current/conf
+  #   depends_on:
+  #     - zookeeper
