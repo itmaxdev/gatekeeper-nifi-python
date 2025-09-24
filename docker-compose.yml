@@ -11,8 +11,8 @@ services:
       dockerfile: Dockerfile
     container_name: nifi-node1
     ports:
-      - "9106:8080"
-      - "9106:8443"
+      - "${NIFI_PORT_HTTP}:8080"
+      - "${NIFI_PORT_HTTPS}:8443"
     environment:
       NIFI_WEB_HTTP_PORT: 8080
       NIFI_CLUSTER_IS_NODE: 'true'
