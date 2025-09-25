@@ -22,8 +22,8 @@ services:
       NIFI_ELECTION_MAX_WAIT: '1 min'
       NIFI_SENSITIVE_PROPS_KEY: 'MySuperSecretKey123'
     volumes:
-      - ${INPUT_FOLDER}:/opt/nifi/nifi-current/input
-      - ${OUTPUT_FOLDER}:/opt/nifi/nifi-current/output
+      - ${INPUT_FOLDER}:${INPUT_FOLDER}
+      - ${OUTPUT_FOLDER}:${OUTPUT_FOLDER}
       - ${LOGS_FOLDER}/node1:/opt/nifi/nifi-current/logs
       - ./scripts:/opt/nifi/custom-scripts
       - ./conf1:/opt/nifi/nifi-current/conf
