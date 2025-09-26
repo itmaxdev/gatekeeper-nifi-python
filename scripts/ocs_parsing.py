@@ -179,13 +179,10 @@ def map_vodacom_cdr_columns(df, filename):
 
 # --- NiFi Entry Point ---
 def main():
-    log_path = os.environ.get("CDR_LOG_PATH")  # allow env var override
     # setup_logging(log_path)
 
     # Read CSV from stdin
     raw_data = sys.stdin.read()
-    with open("debug_raw_input.txt", "w") as f:
-        f.write(raw_data)
     # Load into Pandas DataFrame
     df = pd.read_csv(
         io.StringIO(raw_data),
@@ -198,11 +195,9 @@ def main():
     filename = sys.argv[1] if len(sys.argv) > 1 else "nifi_input"
     records = map_vodacom_cdr_columns(df, filename)
 
-    # Convert to DataFrame for CSV
-    out_df = pd.DataFrame(records)
-
-    # Write CSV to stdout
-    out_df.to_csv(sys.stdout, index=False, sep="|")
+    # Output records as JSON lines to stdout
+    for record in records.to_dicts():
+        print(json.dumps(record))
 
 if __name__ == "__main__":
     main()
