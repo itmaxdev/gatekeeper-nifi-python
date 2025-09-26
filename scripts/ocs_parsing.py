@@ -4,14 +4,50 @@ import json
 import pandas as pd
 from datetime import datetime, timezone
 import io
+import logging
+import os
+
+# --- Logging Setup ---
+
+VODACOM_CDR_COLUMNS = [
+    "RecordType", "OfferID", "GroupID", "SubscriptionID", "BalanceID", 
+    "OfferEntitlementName", "MSISDN", "IMSI", "SubscriberID", "SubscriberType", 
+    "ChargeType", "RecordOpeningTime", "RecordClosingTime", "SessionID", 
+    "SGSNIPAddress", "MCCMNC", "GGSNAddress", "GGSNChargingID", "APN", 
+    "RatingGroup", "ServiceID", "RATType", "UserLocationInformation", 
+    "MSTimezone", "IsRoaming", "Zone", "CCTime", "CCTotalOctets", 
+    "CCInputOctets", "CCOutputOctets", "TerminationCause", "CounterFinalValue", 
+    "RatedCashValuePreTax", "RatedCashValuePostTax", "UserEquipmentInfoType", 
+    "UserEquipmentInfoValue", "BalanceImpactName", "RequestNumber", "IMEI", 
+    "OtherPartyAddress", "Classification", "DirectionType", "ZoneCalled", 
+    "CCServiceSpecificUnits", "RequestType", "OfferName", "ResultCode", 
+    "VLRID", "GLID", "CarrierID", "RoamingCountry", "AccumulatedInBundle", 
+    "AccumulatedOutBundle", "AccumulatedNotApplied", "AccumulatedUsageBalance", 
+    "AccumulatedChargeBalance", "RatedCashValue", "ChunkSize", "ChunkNumber", 
+    "TaxCode",
+    # Reserved columns (61 to 89)
+    *[f"ReservedColumn{i}" for i in range(61, 90)],
+    # Remaining columns (90 to 123)
+    "GrantedCcTime", "GrantedCcTotalOctets", "GrantedCcInputOctets", 
+    "GrantedCcOutputOctets", "GrantedCcServiceSpecificUnits", "RawUsedCcTime", 
+    "RawUsedCcTotalOctets", "RawUsedCcInputOctets", "RawUsedCcOutputOctets", 
+    "RawUsedCcServiceSpecificUnits", "HuaweiOfferID", "HuaweiOfferName", 
+    "PrimaryOfferID", "Channel", "EntitlementUnitType", "UserSessionID", 
+    "VASCategoryID", "VASContentID", "VASSPID", "VASServiceID", "VASCDRINFO1", 
+    "VASCDRINFO2", "VASCDRINFO3", "VASCDRINFO4", "VASCDRINFO5", "VASCDRINFO6", 
+    "CustomerType", "ISUPLocationNumber", "RecordOpenningTimeHr", 
+    "RecordClosingTimeHr", "RequestedPartyAddress", "GroupOwnerMSISDN", 
+    "CUGID", "UsedUnits"
+]
+
 
 # --- Static Mappings (example placeholders, replace with your actual dicts) ---
 RECORD_TYPE = {
-    "1": "Data",
-    "2": "Voice",
-    "3": "SMS",
-    "4": "MMS",
-    "5": "VAS"
+    1: "Data",
+    2: "Voice",
+    3: "SMS",
+    4: "MMS",
+    5: "VAS"
 }
 SUBSCRIBER_TYPE = {
     "1": "Prepaid",
@@ -57,12 +93,12 @@ def parse_amount(key, value):
 # --- Core Mapping Function ---
 def map_vodacom_cdr_columns(df, filename):
     output = []
-
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         classification = str(row.get("Classification", "") or "")
         TotalCharge = row.get("RatedCashValuePostTax") or row.get("ReservedColumn88") or ""
         RecordOpeningTime = int(row.get("RecordOpeningTime", "0") or 0)
         RecordClosingTime = int(row.get("RecordClosingTime", "0") or 0)
+
         TotalCharge = parse_amount("TotalCharge", TotalCharge)
 
         row_dict = {
@@ -134,34 +170,39 @@ def map_vodacom_cdr_columns(df, filename):
         elif "MT_NATIONAL" in classification:
             row_dict["IsInternational"] = to_str(True)
 
+        # Log each processed record (in JSON format for readability)
+        # logging.info(f"Processed record {idx+1}: {json.dumps(row_dict)}")
+
         output.append(row_dict)
 
     return output
 
 # --- NiFi Entry Point ---
 def main():
+    log_path = os.environ.get("CDR_LOG_PATH")  # allow env var override
+    # setup_logging(log_path)
+
     # Read CSV from stdin
     raw_data = sys.stdin.read()
-
+    with open("debug_raw_input.txt", "w") as f:
+        f.write(raw_data)
     # Load into Pandas DataFrame
     df = pd.read_csv(
         io.StringIO(raw_data),
         sep="|",
-        header=None
-        # TODO: add column names -> names=VODACOM_CDR_COLUMNS
+        header=None,
+        names=VODACOM_CDR_COLUMNS
     )
 
     # Transform
     filename = sys.argv[1] if len(sys.argv) > 1 else "nifi_input"
     records = map_vodacom_cdr_columns(df, filename)
-    # Output JSON to stdout
-    for record in records:
-        print(json.dumps(record))
-    # # Convert to DataFrame for CSV
-    # out_df = pd.DataFrame(records)
 
-    # # Write CSV to stdout
-    # out_df.to_csv(sys.stdout, index=False)
+    # Convert to DataFrame for CSV
+    out_df = pd.DataFrame(records)
+
+    # Write CSV to stdout
+    out_df.to_csv(sys.stdout, index=False, sep="|")
 
 if __name__ == "__main__":
     main()
