@@ -196,7 +196,7 @@ def main():
     records = map_vodacom_cdr_columns(df, filename)
 
     # Output records as JSON lines to stdout
-    for record in records.to_dicts():
+    for record in records:
         print(json.dumps(record))
 
 if __name__ == "__main__":
