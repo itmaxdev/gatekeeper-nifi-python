@@ -6,6 +6,7 @@ import io
 import logging
 import os
 import polars as pl
+import math
 
 
 VODACOM_MGR_COLUMNS = [
@@ -87,27 +88,54 @@ CREDIT_TYPE = {
 
 
 def parse_amount(key,value):
-    value = float(value) if value else 0.0
-    if value == 0.0:
-        return {
-            key: 0.0
-        }
+    try:
+        if value is None:
+            return {key: 0.0}
+        try:
+            if pd.isna(value):
+                return {key: 0.0}
+        except Exception:
+            pass
+        val_str = str(value).replace('"', '').strip()
+        if val_str == "":
+            return {key: 0.0}
+        v = float(val_str)
+    except Exception:
+        return {key: 0.0}
+
+    if v == 0.0:
+        return {key: 0.0}
     else:
-        return {
-            key: value / 10000,
-            key+"Currency": "cents"
-        }
+        return {key: v / 10000, key+"Currency": "cents"}
         
 def parse_date(val):
     try:
-        return datetime.strptime(str(val), "%Y%m%d%H%M%S").isoformat() if val and len(str(val)) == 14 else None
+        if val is None:
+            return None
+        try:
+            if pd.isna(val):
+                return None
+        except Exception:
+            pass
+        s = str(val).strip()
+        return datetime.strptime(s, "%Y%m%d%H%M%S").isoformat() if s and len(s) == 14 else None
     except Exception:
         return None
 
 def map_vodacom_mgr_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
     output = []
-    
-    for row in df.to_dicts():
+
+    # support both pandas and polars DataFrame inputs
+    if hasattr(df, "to_dict"):
+        records = df.to_dict(orient="records")
+    elif hasattr(df, "to_dicts"):
+        records = df.to_dicts()
+    else:
+        records = list(df)
+
+    for row in records:
+        row = dict(row)
+
         operationType = row.pop("OperationType", None)
         row["OperationType"] = MGR_OPERATION_TYPE.get(operationType, "Unknown") if operationType else "Unknown"
 
@@ -156,8 +184,6 @@ def map_vodacom_mgr_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
         AdjustAccountAmount = parse_amount("AdjustAccountAmount", row.pop("AdjustAccountAmount", None))
         row = {**row, **AdjustAccountAmount}
 
-        
-
         row["EventTimeStamp"] = parse_date(row.get("EventTimeStamp"))
         row["SubscriberBeginTime"] = parse_date(row.get("SubscriberBeginTime"))
         row["SubscriberEndTime"] = parse_date(row.get("SubscriberEndTime"))
@@ -174,10 +200,6 @@ def map_vodacom_mgr_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
 
         output.append(row)
 
-    # Ensure all fields are string
-    # for i, row in enumerate(output):
-    #     output[i] = {k: str(v) for k, v in row.items()}
-    # Use dtypes=[pl.Utf8] for all columns
     return pl.DataFrame(output, schema_overrides={k: pl.Utf8 for k in output[0].keys()} if output else None)
 
 
@@ -201,9 +223,31 @@ def main():
     filename = sys.argv[1] if len(sys.argv) > 1 else "nifi_input"
     records = map_vodacom_mgr_columns(df, filename)
 
-    # Output records as JSON lines to stdout
-    for record in records.to_dicts():
-        print(json.dumps(record))
+    # If map_vodacom_mgr_columns returns a Polars DataFrame, convert to list of dicts
+    if isinstance(records, pl.DataFrame):
+        records = records.to_dicts()
+
+    def sanitize_value(v):
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        try:
+            if isinstance(v, float) and math.isnan(v):
+                return None
+        except Exception:
+            pass
+        try:
+            if hasattr(v, "item"):
+                return v.item()
+        except Exception:
+            pass
+        return v
+
+    sanitized = [{k: sanitize_value(v) for k, v in (r or {}).items()} for r in records]
+
+    # Emit a single JSON array (valid JSON for EvaluateJsonPath)
+    print(json.dumps(sanitized, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()

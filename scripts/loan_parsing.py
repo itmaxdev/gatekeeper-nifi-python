@@ -6,6 +6,7 @@ import io
 import logging
 import os
 import polars as pl
+import math
 
 
 
@@ -41,42 +42,89 @@ LOAN_SUBS_ID_TYPE = {
 }
 def parse_date(val):
     try:
-        return datetime.strptime(str(val), "%Y%m%d%H%M%S").isoformat() if val and len(str(val)) == 14 else None
+        if val is None:
+            return None
+        try:
+            if pd.isna(val):
+                return None
+        except Exception:
+            pass
+        s = str(val).strip()
+        return datetime.strptime(s, "%Y%m%d%H%M%S").isoformat() if s and len(s) == 14 else None
     except Exception:
         return None
 
-def parse_amount(key,value):
-    value = float(value) if value else 0.0
-    if value == 0.0:
-        return {
-            key: 0.0
-        }
+def parse_amount(key, value):
+    # safe float conversion, treat NaN/empty as zero
+    try:
+        if value is None:
+            return {key: 0.0}
+        try:
+            if pd.isna(value):
+                return {key: 0.0}
+        except Exception:
+            pass
+        val_str = str(value).replace('"', '').strip()
+        if val_str == "":
+            return {key: 0.0}
+        v = float(val_str)
+    except Exception:
+        return {key: 0.0}
+
+    if v == 0.0:
+        return {key: 0.0}
     else:
-        return {
-            key: value / 10000,
-            key+"Currency": "cents"
-        }
+        return {key: v / 10000, key + "Currency": "cents"}
+
+def safe_float(val, default=0.0):
+    try:
+        if val is None:
+            return default
+        try:
+            if pd.isna(val):
+                return default
+        except Exception:
+            pass
+        s = str(val).strip()
+        if s == "":
+            return default
+        return float(s)
+    except Exception:
+        return default
 
 def map_vodacom_loan_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
     output = []
 
-    for row in df.to_dicts():
+    # support both pandas and polars DataFrame inputs
+    if hasattr(df, "to_dict"):
+        records = df.to_dict(orient="records")
+    elif hasattr(df, "to_dicts"):
+        records = df.to_dicts()
+    else:
+        records = list(df)
+
+    for row in records:
+        row = dict(row)  # ensure mutable dict copy
+
         LoanFlag = row.pop("LoanFlag", None)
-        row["LoanFlag"] = LOAN_FLAG.get(LoanFlag, "Unknown") if LoanFlag else "Unknown"
+        row["LoanFlag"] = LOAN_FLAG.get(str(LoanFlag), "Unknown") if LoanFlag is not None else "Unknown"
 
-        row["EventType"] = LOAN_TYPE.get(row.get("EventType", None), "Unknown")
-        row["SubscriberIDType"] = LOAN_SUBS_ID_TYPE.get(row.get("SubscriberIDType", None), "Unknown")
-
+        row["EventType"] = LOAN_TYPE.get(str(row.get("EventType", None)), "Unknown")
+        row["SubscriberIDType"] = LOAN_SUBS_ID_TYPE.get(str(row.get("SubscriberIDType", None)), "Unknown")
 
         row['RecordType'] = 'Loan'
         row['Operator'] = 'Vodacom'
         row['FileName'] = filename
         row['DateParsed'] = datetime.now().isoformat()
-        LoanAmount = row.get("LoanAmount", None)
-        CommissionRate = row.get("CommissionRate", None)
-        if LoanAmount is not None:
-            Commission = float(LoanAmount) * (float(CommissionRate) / 100) if CommissionRate else 0.0
-            row['CommssionAmount'] = round(Commission, 2) if Commission else 0.0
+
+        # compute commission safely
+        LoanAmount_raw = row.get("LoanAmount", None)
+        CommissionRate_raw = row.get("CommissionRate", None)
+        loan_amount_val = safe_float(LoanAmount_raw, 0.0)
+        commission_rate_val = safe_float(CommissionRate_raw, 0.0)
+        if loan_amount_val:
+            commission = loan_amount_val * (commission_rate_val / 100) if commission_rate_val else 0.0
+            row['CommssionAmount'] = round(commission, 2) if commission else 0.0
         else:
             row['CommssionAmount'] = 0.0
 
@@ -100,6 +148,7 @@ def map_vodacom_loan_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
             if isinstance(value, datetime):
                 row[key] = value.isoformat()
 
+        # Remove None and empty string values
         row = {k: v for k, v in row.items() if v not in [None, ""]}
         output.append(row)
 
@@ -116,8 +165,6 @@ VODACOM_RETURN_MODE = {
 
 # --- NiFi Entry Point ---
 def main():
-    # setup_logging(log_path)
-
     # Read CSV from stdin
     raw_data = sys.stdin.read()
     # Load into Pandas DataFrame
@@ -132,9 +179,31 @@ def main():
     filename = sys.argv[1] if len(sys.argv) > 1 else "nifi_input"
     records = map_vodacom_loan_columns(df, filename)
 
-    # Output records as JSON lines to stdout
-    for record in records.to_dicts():
-        print(json.dumps(record))
+    # If map_vodacom_loan_columns returns a Polars DataFrame, convert to list of dicts
+    if isinstance(records, pl.DataFrame):
+        records = records.to_dicts()
+
+    def sanitize_value(v):
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        try:
+            if isinstance(v, float) and math.isnan(v):
+                return None
+        except Exception:
+            pass
+        try:
+            if hasattr(v, "item"):
+                return v.item()
+        except Exception:
+            pass
+        return v
+
+    sanitized = [{k: sanitize_value(v) for k, v in (r or {}).items()} for r in records]
+
+    # Emit a single JSON array (valid JSON for EvaluateJsonPath)
+    print(json.dumps(sanitized, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()
