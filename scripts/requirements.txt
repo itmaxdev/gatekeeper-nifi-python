@@ -1,2 +1,2 @@
 pandas
-polars
+polars-lts-cpu

@@ -6,11 +6,11 @@ import io
 import logging
 import os
 import polars as pl
+import math
 
 VODACOM_RETURN_COLUMNS = [
     "SerialNo", "EventTimeStamp", "BrandID", "SubCOSID", "MSISDN", "TriggerMSISDN", "ReturnMode", "ReturnAmount", "AccountLeft", "AftAccountLeft", "BorrowValuesBf", "BorrowValuesAf", "ETUGracePeriod", "GracePeriod", "ETUFraudState", "AccountType1", "ChargeAmount1", "CurrentAcctAmount1", "AccountType2", "ChargeAmount2", "CurrentAcctAmount2", "AccountType3", "ChargeAmount3", "CurrentAcctAmount3", "AccountType4", "ChargeAmount4", "CurrentAcctAmount4", "AccountType5", "ChargeAmount5", "CurrentAcctAmount5", "PrimaryOfferID", "CommissionRate", "SubscriberID", "LoanType"
 ]
-
 
 VODACOM_RETURN_MODE = {
     "1": "recharge",
@@ -18,68 +18,125 @@ VODACOM_RETURN_MODE = {
     "3": "forcible loan payment"
 }
 
-def parse_amount(key,value):
-    value = float(value) if value else 0.0
-    if value == 0.0:
-        return {
-            key: 0.0
-        }
+def safe_float(val, default=0.0):
+    try:
+        if val is None:
+            return default
+        try:
+            if pd.isna(val):
+                return default
+        except Exception:
+            pass
+        s = str(val).replace('"', '').strip()
+        if s == "":
+            return default
+        return float(s)
+    except Exception:
+        return default
+
+def parse_amount(key, value):
+    v = safe_float(value, 0.0)
+    if v == 0.0:
+        return { key: 0.0 }
     else:
-        return {
-            key: value / 10000,
-            key+"Currency": "cents"
-        }
+        return { key: v / 10000, key + "Currency": "cents" }
+
+def to_iso_timestamp_from_epoch_ms(val):
+    try:
+        if val is None:
+            return None
+        try:
+            if pd.isna(val):
+                return None
+        except Exception:
+            pass
+        s = str(val).strip()
+        if s == "":
+            return None
+        iv = int(float(s))
+        # treat > 1e11 as milliseconds
+        if iv > 1e11:
+            return datetime.fromtimestamp(iv / 1000, tz=timezone.utc).isoformat()
+        else:
+            return datetime.fromtimestamp(iv, tz=timezone.utc).isoformat()
+    except Exception:
+        return None
 
 def parse_date(val):
     try:
-        return datetime.strptime(str(val), "%Y%m%d%H%M%S").isoformat() if val and len(str(val)) == 14 else None
+        if val is None:
+            return None
+        try:
+            if pd.isna(val):
+                return None
+        except Exception:
+            pass
+        s = str(val).strip()
+        if s == "":
+            return None
+        # yyyymmddHHMMSS
+        if len(s) == 14 and s.isdigit():
+            return datetime.strptime(s, "%Y%m%d%H%M%S").isoformat()
+        # epoch ms or seconds
+        return to_iso_timestamp_from_epoch_ms(s)
     except Exception:
         return None
 
 def map_vodacom_return_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
     output = []
 
+    # accept pandas or polars inputs
+    if hasattr(df, "to_dict"):
+        records = df.to_dict(orient="records")
+    elif hasattr(df, "to_dicts"):
+        records = df.to_dicts()
+    else:
+        records = list(df)
 
-    for row in df.to_dicts():
-        row_dict = dict(row)
+    for row in records:
+        row = dict(row)
 
+        row_dict = {}
         row_dict['RecordType'] = 'Return'
         row_dict['Operator'] = 'Vodacom'
         row_dict['FileName'] = filename
         row_dict['DateParsed'] = datetime.now().isoformat()
 
         row_dict["EventTimeStamp"] = parse_date(row.get("EventTimeStamp"))
-        row_dict["ReturnMode"] = VODACOM_RETURN_MODE.get(row.get("ReturnMode", None), "Unknown")
-        
-        ReturnAmount = parse_amount("ReturnAmount", row.pop("ReturnAmount", None))
-        row_dict = {**row_dict, **ReturnAmount}
-        
-        AccountLeft = parse_amount("AccountLeft", row.pop("AccountLeft", None))
-        row_dict = {**row_dict, **AccountLeft}
-        
-        AftAccountLeft = parse_amount("AftAccountLeft", row.pop("AftAccountLeft", None))
-        row_dict = {**row_dict, **AftAccountLeft}
-        
-        BorrowValuesBf = parse_amount("BorrowValuesBf", row.pop("BorrowValuesBf", None))
-        row_dict = {**row_dict, **BorrowValuesBf}
-        
-        BorrowValuesAf = parse_amount("BorrowValuesAf", row.pop("BorrowValuesAf", None))
-        row_dict = {**row_dict, **BorrowValuesAf}
-        
-        CommissionRate = row.pop("CommissionRate", None)
-        if CommissionRate is not None:
-            Commission = float(row_dict.get("ReturnAmount", 0)) * (float(CommissionRate) / 100)
-            row_dict['CommssionAmount'] = round(Commission, 2) if Commission else 0.0
-        
-        
-        
+        row_dict["ReturnMode"] = VODACOM_RETURN_MODE.get(str(row.get("ReturnMode", "")).strip(), "Unknown")
+
+        # amounts
+        row_dict.update(parse_amount("ReturnAmount", row.pop("ReturnAmount", None)))
+        row_dict.update(parse_amount("AccountLeft", row.pop("AccountLeft", None)))
+        row_dict.update(parse_amount("AftAccountLeft", row.pop("AftAccountLeft", None)))
+        row_dict.update(parse_amount("BorrowValuesBf", row.pop("BorrowValuesBf", None)))
+        row_dict.update(parse_amount("BorrowValuesAf", row.pop("BorrowValuesAf", None)))
+
+        # charge amounts 1..5
         for i in range(1, 6):
             tmpName = f"ChargeAmount{i}"
-            ChargeAmount = parse_amount(tmpName, row.pop(tmpName, None))
-            row_dict = {**row_dict, **ChargeAmount}
+            row_dict.update(parse_amount(tmpName, row.pop(tmpName, None)))
+
+        # commission: use parsed ReturnAmount (already divided)
+        commission_rate = safe_float(row.get("CommissionRate", None), None)
+        try:
+            return_amt = float(row_dict.get("ReturnAmount", 0.0))
+        except Exception:
+            return_amt = 0.0
+        if commission_rate is not None:
+            try:
+                comm = return_amt * (commission_rate / 100.0)
+                row_dict['CommssionAmount'] = round(comm, 2) if comm else 0.0
+            except Exception:
+                row_dict['CommssionAmount'] = 0.0
+
+        # preserve some identifiers
+        for keep in ("SerialNo", "MSISDN", "TriggerMSISDN", "PrimaryOfferID", "SubscriberID", "LoanType", "BrandID", "SubCOSID"):
+            if keep in row and row.get(keep) not in [None, ""]:
+                row_dict[keep] = row.get(keep)
 
         # Convert any remaining datetime objects to ISO 8601
-        for key, value in row_dict.items():
+        for key, value in list(row_dict.items()):
             if isinstance(value, datetime):
                 row_dict[key] = value.isoformat()
 
@@ -89,11 +146,7 @@ def map_vodacom_return_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
 
     return pl.DataFrame(output)
 
-
-# --- NiFi Entry Point ---
 def main():
-    # setup_logging(log_path)
-
     # Read CSV from stdin
     raw_data = sys.stdin.read()
     # Load into Pandas DataFrame
@@ -101,16 +154,44 @@ def main():
         io.StringIO(raw_data),
         sep="|",
         header=None,
-        names=VODACOM_RETURN_COLUMNS
+        names=VODACOM_RETURN_COLUMNS,
+        dtype=str
     )
 
-    # Transform
+    # normalize NA -> empty string
+    df = df.fillna("")
+
     filename = sys.argv[1] if len(sys.argv) > 1 else "nifi_input"
     records = map_vodacom_return_columns(df, filename)
 
-    # Output records as JSON lines to stdout
-    for record in records.to_dicts():
-        print(json.dumps(record))
+    # If Polars DataFrame returned, convert to list of dicts
+    if isinstance(records, pl.DataFrame):
+        records = records.to_dicts()
+
+    def sanitize_value(v):
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        try:
+            if isinstance(v, float) and math.isnan(v):
+                return None
+        except Exception:
+            pass
+        try:
+            if hasattr(v, "item"):
+                return v.item()
+        except Exception:
+            pass
+        # keep empty strings as None
+        if isinstance(v, str) and v == "":
+            return None
+        return v
+
+    sanitized = [{k: sanitize_value(v) for k, v in (r or {}).items()} for r in (records or [])]
+
+    # Emit a single JSON array (valid JSON for EvaluateJsonPath)
+    print(json.dumps(sanitized, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()

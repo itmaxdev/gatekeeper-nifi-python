@@ -24,6 +24,7 @@ services:
       OUTPUT_FOLDER: ${OUTPUT_FOLDER}
       SCRIPTS_FOLDER: ${SCRIPTS_FOLDER}
       KAFKA_BROKER: ${KAFKA_BROKER}
+      JAVA_OPTS: "-Xms4g -Xmx8g"
     volumes:
       - ${INPUT_FOLDER}:${INPUT_FOLDER}
       - ${OUTPUT_FOLDER}:${OUTPUT_FOLDER}
