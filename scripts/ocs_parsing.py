@@ -45,11 +45,11 @@ VODACOM_CDR_COLUMNS = [
 
 # --- Static Mappings (example placeholders, replace with your actual dicts) ---
 RECORD_TYPE = {
-    1: "Data",
-    2: "Voice",
-    3: "SMS",
-    4: "MMS",
-    5: "VAS"
+    "1": "Data",
+    "2": "Voice",
+    "3": "SMS",
+    "4": "MMS",
+    "5": "VAS"
 }
 SUBSCRIBER_TYPE = {
     "1": "Prepaid",
