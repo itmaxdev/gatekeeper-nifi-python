@@ -117,8 +117,9 @@ def main():
 
     sanitized = [{k: sanitize_value(v) for k, v in (r or {}).items()} for r in records]
 
-    # Emit a single JSON array (valid JSON for EvaluateJsonPath)
-    print(json.dumps(sanitized, ensure_ascii=False))
+    # Emit a ndjson response
+    for record in sanitized:
+        print(json.dumps(record, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()
