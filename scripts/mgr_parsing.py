@@ -172,8 +172,8 @@ def map_vodacom_mgr_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
         ChargeFromPostpaid = parse_amount("ChargeFromPostpaid", row.pop("ChargeFromPostpaid", None))
         row = {**row, **ChargeFromPostpaid}
         
-        PostPaidBalance = parse_amount("PostPaidBalance", row.pop("PostPaidBalance", None))
-        row = {**row, **PostPaidBalance}
+        PostpaidBalance = parse_amount("PostpaidBalance", row.pop("PostpaidBalance", None))
+        row = {**row, **PostpaidBalance}
         
         BalanceDeducted = parse_amount("BalanceDeducted", row.pop("BalanceDeducted", None))
         row = {**row, **BalanceDeducted}
