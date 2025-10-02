@@ -182,7 +182,7 @@ def main():
     # If map_vodacom_loan_columns returns a Polars DataFrame, convert to list of dicts
     if isinstance(records, pl.DataFrame):
         records = records.to_dicts()
-
+    records.pop(0)
     def sanitize_value(v):
         if v is None:
             return None

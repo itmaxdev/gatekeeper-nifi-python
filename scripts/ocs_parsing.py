@@ -235,6 +235,7 @@ def main():
     # If records is a Polars DataFrame convert (defensive)
     if isinstance(records, pl.DataFrame):
         records = records.to_dicts()
+    records.pop(0)
 
     def sanitize_value(v):
         if v is None:
