@@ -1,2 +1,3 @@
 pandas
 polars-lts-cpu
+asn1tools
