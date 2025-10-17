@@ -8,9 +8,8 @@ def decode_raw_msc(raw_data, filename):
     cleaned = clean_nested(decoded)
     prefix_to_remove = ["18", "19", "110", "180", "0"]
     normalized_records = normalize_msc_file(cleaned, filename, "Vodacom", prefix_to_remove)
-    with open(f"output/{filename}_msc_normalized.txt", "w") as out_file:
-        for record in normalized_records:
-            out_file.write(str(record) + "\n")
+    for record in normalized_records:
+        print(json.dumps(record, ensure_ascii=False))
     # Process the decoded data as needed
     # print(f"Decoded MSC data from {filename}: {normalized_records}")
     # sys.exit(1)

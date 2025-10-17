@@ -1,5 +1,7 @@
 import sys
 import traceback
+
+import json
 from asn1.tap_compiler import clean_nested
 from asn1.tap_compiler import decode_tap_file, normalize_tap_file
 
@@ -14,7 +16,8 @@ def main():
         normalized_records = normalize_tap_file(clear_response, filename, "Vodacom")
         if normalized_records:
             for record in normalized_records:
-                print(record)
+                # print dict with double quotes
+                print(json.dumps(record, ensure_ascii=False))
         else:
             print("No records found", file=sys.stderr)
             # sys.exit(1)

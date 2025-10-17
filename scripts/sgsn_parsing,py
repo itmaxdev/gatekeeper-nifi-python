@@ -19,15 +19,12 @@ def decode_raw_sgsn(raw_data, filename):
             records.append(mapped_record)
         if not records:
             # fallback: try decoding whole blob as single record
-            print("fallback: try decoding whole blob as single record")
             decoded = decode_sgsn_file(raw_data)
             pretty = pretty_decode(decoded)
             mapped_record = map_sgsn_record(pretty)
             records.append(mapped_record)
-        print(f"Decoded {len(records)} records from the input file.")
-        with open(f"output/{filename}_raw.txt", "w") as out_file:
-            for record in records:
-                out_file.write(str(record) + "\n")
+        for record in records:
+            print(json.dumps(record, ensure_ascii=False))
         # clear_response = clean_nested(response)
         # normalized_records = normalize_sgsn_file(clear_response, filename, "Vodacom")
         # if normalized_records:
