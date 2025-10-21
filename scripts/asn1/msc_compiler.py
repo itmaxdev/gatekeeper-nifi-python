@@ -75,7 +75,7 @@ def decode_msc_file(raw_data):
         # Strategy 1: Try to decode as a complete file structure.
     try:
         decoded_data = msc_compiler.decode("CallEventDataFile", raw_data)
-        print("Successfully decoded file as a single CallEventDataFile.")
+        # print("Successfully decoded file as a single CallEventDataFile.")
         # The structure is different, so we need to extract the records
         all_records = decoded_data.get("callEventRecords", [])
     except Exception:
@@ -104,7 +104,7 @@ def decode_msc_file(raw_data):
                 
                 # Reset consecutive error tracking on successful decode
                 if skipped_group_call_count > 0:
-                    print(f"Successfully resumed processing after skipping {skipped_group_call_count} GroupCallRecord errors")
+                    # print(f"Successfully resumed processing after skipping {skipped_group_call_count} GroupCallRecord errors")
                     skipped_group_call_count = 0
                     last_error_type = None
                     
@@ -118,10 +118,11 @@ def decode_msc_file(raw_data):
                     
                     # Only print detailed warnings for the first few errors and error type changes
                     if skipped_group_call_count <= 3 or current_error_type != last_error_type:
-                        print(f"Warning: Skipping record {record_count + 1} due to GroupCallRecord {current_error_type} error")
+                        # print(f"Warning: Skipping record {record_count + 1} due to GroupCallRecord {current_error_type} error")
                         last_error_type = current_error_type
                     elif skipped_group_call_count % 50 == 0:  # Print progress every 50 skipped records
-                        print(f"... skipped {skipped_group_call_count} GroupCallRecord errors so far ...")
+                        # print(f"... skipped {skipped_group_call_count} GroupCallRecord errors so far ...")
+                        pass
                     
                     try:
                         # Skip this problematic record and continue
@@ -135,7 +136,8 @@ def decode_msc_file(raw_data):
                         pass
                 else:
                     # For non-GroupCallRecord errors, print full warning
-                    print(f"Warning: Skipping record {record_count + 1} due to decoding error: {e}")
+                    # print(f"Warning: Skipping record {record_count + 1} due to decoding error: {e}")
+                    pass
                 
                 # For other decoding errors, try to skip and continue
                 try:
@@ -143,7 +145,7 @@ def decode_msc_file(raw_data):
                     if record_len > 0:
                         remaining_data = remaining_data[record_len:]
                         record_count += 1
-                        print(f"Skipped problematic record, continuing...")
+                        # print(f"Skipped problematic record, continuing...")
                         continue
                 except:
                     pass
@@ -154,7 +156,7 @@ def decode_msc_file(raw_data):
         
         # Final summary of skipped GroupCallRecords
         if skipped_group_call_count > 0:
-            print(f"Total GroupCallRecord errors encountered and skipped: {skipped_group_call_count}")
+            # print(f"Total GroupCallRecord errors encountered and skipped: {skipped_group_call_count}")
             
             # If ALL records failed and they were all GroupCallRecord errors, suggest wrong file type
             if len(all_records) == 0 and skipped_group_call_count > 100:
@@ -165,7 +167,7 @@ def decode_msc_file(raw_data):
                 print("  • Check if this file contains SGSN data (use process_sgsn.ps1)")
                 print("  • Verify the ASN.1 schema matches your MSC vendor format")
     if all_records:
-        print(f"Successfully decoded {len(all_records)} records.")
+        # print(f"Successfully decoded {len(all_records)} records.")
         return all_records
 
 def decode_bcd_variant(data, swap_nibbles=False):
@@ -416,7 +418,7 @@ def transform_record(record, filename, config):
     return all_transformed
 
 def normalize_msc_file(data, filename, operator, prefixes_to_remove=None):
-    print(f"Normalizing {len(data)} CallEventRecords from {filename} for operator {operator}")
+    # print(f"Normalizing {len(data)} CallEventRecords from {filename} for operator {operator}")
     normalized = []
     for record in data:
         transformed = transform_record(record, filename, {
