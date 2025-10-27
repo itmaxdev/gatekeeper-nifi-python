@@ -102,7 +102,7 @@ def get_tax_code_display_name(tax_code, tax_list):
     
     return f"taxCode{display_code}"
 
-def flatten_event_data(event_type, event_data):
+def flatten_event_data(event_type, event_data, header_data):
     """
     Flattens the nested event data structure into a flat dictionary,
     matching the client's required flat format for all event types.
@@ -184,7 +184,7 @@ def flatten_event_data(event_type, event_data):
             'dataVolumeIncoming': get_nested(service_used, 'dataVolumeIncoming'),
             'dataVolumeOutgoing': get_nested(service_used, 'dataVolumeOutgoing')
         })
-        
+        flat_data['event_type'] = event_type
         charge_info_list = get_nested(service_used, "chargeInformationList", default=[])
         if charge_info_list:
             charge_info = charge_info_list[0]
@@ -198,19 +198,24 @@ def flatten_event_data(event_type, event_data):
             # Flatten tax info using the new required format (taxCode1, taxCode2, etc.)
             tax_list = get_nested(charge_info, 'taxInformation') or []
             for i, tax_item in enumerate(tax_list):
-                if i < 2:  # Only take first two tax codes as per expected format
-                    tax_code = tax_item.get('taxCode')
-                    tax_value = tax_item.get('taxValue')
-                    
-                    # Create the new format: taxCode1, taxCode2 with their corresponding values
-                    if tax_code is not None:
-                        display_name = get_tax_code_display_name(tax_code, tax_list)
-                        if display_name:
-                            flat_data[display_name] = str(tax_value) if tax_value is not None else None
-                    
-                    # Also keep taxableAmount if charge_value exists
-                    if charge_value is not None:
-                        flat_data['taxableAmount'] = charge_value
+                # if i < 2:  # Only take first two tax codes as per expected format
+                tax_code = str(tax_item.get('taxCode'))
+                tax_value = tax_item.get('taxValue')
+                
+                header_tax = header_data.get('_tax_codes', {}).get(int(tax_code), {})
+                tax_rate = header_tax.get('taxRate')
+                flat_data['tax_value'+tax_code] = tax_value
+                flat_data['tax_rate'+tax_code] = tax_rate
+                
+                # Create the new format: taxCode1, taxCode2 with their corresponding values
+                # if tax_code is not None:
+                #     display_name = get_tax_code_display_name(tax_code, tax_list)
+                #     if display_name:
+                #         flat_data[display_name] = str(tax_value) if tax_value is not None else None
+                
+                # Also keep taxableAmount if charge_value exists
+                if charge_value is not None:
+                    flat_data['taxableAmount'] = charge_value
 
     elif event_type == 'mobileOriginatedCall':
         basic_info = get_nested(event_data, "basicCallInformation", default={})
@@ -225,33 +230,67 @@ def flatten_event_data(event_type, event_data):
             "locationArea": get_nested(location_info, "locationArea"),
             "cellId": get_nested(location_info, "cellId")
         })
+        flat_data['event_type'] = event_type
 
-        service_info = get_nested(event_data, "basicServiceUsedList", 0, default={})
-        if service_info:
-            flat_data["teleServiceCode"] = get_nested(service_info, "basicService", "serviceCode", 1)
-            charge_info = get_nested(service_info, "chargeInformationList", 0, default={})
-            flat_data["chargedItem"] = charge_info.get("chargedItem")
-            charge_value = get_nested(charge_info, "chargeDetailList", 0, "charge")
-            flat_data["charge"] = charge_value
-            
-            # Add callReference if available
-            flat_data["callReference"] = get_nested(basic_info, "callReference")
+        basicServiceUsedList = get_nested(event_data, "basicServiceUsedList", default={})
+        for service in basicServiceUsedList:
+            flat_data["serviceCode"] = get_nested(service, "basicService", "serviceCode","teleServiceCode")
+            charge_info_list = get_nested(service, "chargeInformationList", default=[])
+            if charge_info_list:
+                charge_info = charge_info_list[0]
+                charge_detail = get_nested(charge_info, 'chargeDetailList', 0, default={})
+                
+                # Use a variable for charge to avoid multiple lookups
+                charge_value = charge_detail.get('charge')
+                flat_data['charge'] = charge_value
+                flat_data['chargeableUnits'] = charge_detail.get('chargeableUnits')
 
-            tax_list = get_nested(charge_info, 'taxInformation') or []
-            for i, tax_item in enumerate(tax_list):
-                if i < 2:  # Only take first two tax codes as per expected format
-                    tax_code = tax_item.get('taxCode')
+                # Flatten tax info using the new required format (taxCode1, taxCode2, etc.)
+                tax_list = get_nested(charge_info, 'taxInformation') or []
+                for i, tax_item in enumerate(tax_list):
+                    # if i < 2:  # Only take first two tax codes as per expected format
+                    tax_code = str(tax_item.get('taxCode'))
                     tax_value = tax_item.get('taxValue')
                     
+                    header_tax = header_data.get('_tax_codes', {}).get(int(tax_code), {})
+                    tax_rate = header_tax.get('taxRate')
+                    flat_data['tax_value'+tax_code] = tax_value
+                    flat_data['tax_rate'+tax_code] = tax_rate
+                    
                     # Create the new format: taxCode1, taxCode2 with their corresponding values
-                    if tax_code is not None:
-                        display_name = get_tax_code_display_name(tax_code, tax_list)
-                        if display_name:
-                            flat_data[display_name] = str(tax_value) if tax_value is not None else None
+                    # if tax_code is not None:
+                    #     display_name = get_tax_code_display_name(tax_code, tax_list)
+                    #     if display_name:
+                    #         flat_data[display_name] = str(tax_value) if tax_value is not None else None
                     
                     # Also keep taxableAmount if charge_value exists
                     if charge_value is not None:
                         flat_data['taxableAmount'] = charge_value
+        # if service_info:
+        #     flat_data["teleServiceCode"] = get_nested(service_info, "basicService", "serviceCode", 1)
+        #     charge_info = get_nested(service_info, "chargeInformationList", 0, default={})
+        #     flat_data["chargedItem"] = charge_info.get("chargedItem")
+        #     charge_value = get_nested(charge_info, "chargeDetailList", 0, "charge")
+        #     flat_data["charge"] = charge_value
+            
+        #     # Add callReference if available
+        #     flat_data["callReference"] = get_nested(basic_info, "callReference")
+
+        #     tax_list = get_nested(charge_info, 'taxInformation') or []
+        #     for i, tax_item in enumerate(tax_list):
+        #         if i < 2:  # Only take first two tax codes as per expected format
+        #             tax_code = tax_item.get('taxCode')
+        #             tax_value = tax_item.get('taxValue')
+                    
+        #             # Create the new format: taxCode1, taxCode2 with their corresponding values
+        #             if tax_code is not None:
+        #                 display_name = get_tax_code_display_name(tax_code, tax_list)
+        #                 if display_name:
+        #                     flat_data[display_name] = str(tax_value) if tax_value is not None else None
+                    
+        #             # Also keep taxableAmount if charge_value exists
+        #             if charge_value is not None:
+        #                 flat_data['taxableAmount'] = charge_value
 
     elif event_type == 'mobileTerminatedCall':
         basic_info = get_nested(event_data, "basicCallInformation", default={})
@@ -264,30 +303,42 @@ def flatten_event_data(event_type, event_data):
             "locationArea": get_nested(location_info, "locationArea"),
             "cellId": get_nested(location_info, "cellId"),
         })
+        flat_data['event_type'] = event_type
+        basicServiceUsedList = get_nested(event_data, "basicServiceUsedList", default={})
+        for service in basicServiceUsedList:
+            service_info = service
         
-        service_info = get_nested(event_data, "basicServiceUsedList", 0, default={})
-        if service_info:
-            flat_data["teleServiceCode"] = get_nested(service_info, "basicService", "serviceCode", 1)
-            charge_info = get_nested(service_info, "chargeInformationList", 0, default={})
-            flat_data["chargedItem"] = charge_info.get("chargedItem")
-            charge_value = get_nested(charge_info, "chargeDetailList", 0, "charge")
-            flat_data["charge"] = charge_value
+            # service_info = get_nested(event_data, "basicServiceUsedList", 0, default={})
+            if service_info:
+                flat_data["teleServiceCode"] = get_nested(service_info, "basicService", "serviceCode", "teleServiceCode")
+                charge_info_list = get_nested(service_info, "chargeInformationList", default=[])
+                for charge_info in charge_info_list:
+                    
+                    # charge_info = get_nested(service_info, "chargeInformationList", 0, default={})
+                    flat_data["chargedItem"] = charge_info.get("chargedItem")
+                    charge_value = get_nested(charge_info, "chargeDetailList", 0, "charge")
+                    flat_data["charge"] = charge_value
 
-            tax_list = get_nested(charge_info, 'taxInformation') or []
-            for i, tax_item in enumerate(tax_list):
-                if i < 2:  # Only take first two tax codes as per expected format
-                    tax_code = tax_item.get('taxCode')
-                    tax_value = tax_item.get('taxValue')
-                    
-                    # Create the new format: taxCode1, taxCode2 with their corresponding values
-                    if tax_code is not None:
-                        display_name = get_tax_code_display_name(tax_code, tax_list)
-                        if display_name:
-                            flat_data[display_name] = str(tax_value) if tax_value is not None else None
-                    
-                    # Also keep taxableAmount if charge_value exists
-                    if charge_value is not None:
-                        flat_data['taxableAmount'] = charge_value
+                    tax_list = get_nested(charge_info, 'taxInformation') or []
+                    for i, tax_item in enumerate(tax_list):
+                        # if i < 2:  # Only take first two tax codes as per expected format
+                        tax_code = str(tax_item.get('taxCode'))
+                        tax_value = tax_item.get('taxValue')
+                        
+                        header_tax = header_data.get('_tax_codes', {}).get(int(tax_code), {})
+                        tax_rate = header_tax.get('taxRate')
+                        flat_data['tax_value'+tax_code] = tax_value
+                        flat_data['tax_rate'+tax_code] = tax_rate
+                            
+                        # # Create the new format: taxCode1, taxCode2 with their corresponding values
+                        # if tax_code is not None:
+                        #     display_name = get_tax_code_display_name(tax_code, tax_list)
+                        #     if display_name:
+                        #         flat_data[display_name] = str(tax_value) if tax_value is not None else None
+                        
+                        # Also keep taxableAmount if charge_value exists
+                        if charge_value is not None:
+                            flat_data['taxableAmount'] = charge_value
 
     # Remove keys with None values before returning, but preserve important fields like IMEI
     preserved_fields = ['imei', 'imsi', 'msisdn']  # Fields that should be preserved even if None
@@ -356,12 +407,15 @@ def decode_tbcd(tbcd_data):
     
     return result
 def decode_tap_file(encoded_data):
-
-    decoded_data = tap_compiler.decode("DataInterChange", encoded_data)
-    wrapped_data = {
-        "tapRecord": [decoded_data[0], decoded_data[1]]
-    }
-    return wrapped_data
+    try:
+        decoded_data = tap_compiler.decode("DataInterChange", encoded_data)
+        wrapped_data = {
+            "tapRecord": [decoded_data[0], decoded_data[1]]
+        }
+        return wrapped_data
+    except Exception as e:
+        print(f"Error decoding TAP file: {e}")
+        return {"error": str(e)}
 
 
 def decode_imsi_tbcd(imsi_data):
@@ -561,8 +615,8 @@ def get_header_data(transfer_batch):
         })
 
     # Add fixed tax rates for roaming header as per configuration requirements (right after sender/recipient)
-    header["taxrate1"] = 1000000
-    header["taxrate2"] = 1600000
+    # header["taxrate1"] = 1000000
+    # header["taxrate2"] = 1600000
 
     # Continue with fileSequenceNumber and other header fields
     if bci:
@@ -578,7 +632,16 @@ def get_header_data(transfer_batch):
         if currency_info_list:
             header["numberOfDecimalPlaces"] = currency_info_list[0].get("numberOfDecimalPlaces")
             header["exchangeRate"] = currency_info_list[0].get("exchangeRate")
+            
+        taxation = ai.get("taxation", {})
+        tax_info_dict = {}
+        if taxation:
+            for tax_info in taxation:
+                tax_code = tax_info.get("taxCode")
+                if tax_code:
+                    tax_info_dict[tax_code] = tax_info
         
+        header["_tax_codes"] = tax_info_dict
         header["tapDecimalPlaces"] = ai.get("tapDecimalPlaces")
 
     return header
@@ -605,7 +668,7 @@ def normalize_tap_file(raw_data,filename, operator):
         return
 
     if not call_events:
-        print("No 'callEventDetails' found to process.")
+        # print("No 'callEventDetails' found to process.")
         return
 
     # print(f"Normalizing {len(call_events)} call events...")
@@ -634,17 +697,17 @@ def normalize_tap_file(raw_data,filename, operator):
             normalized_record['eventType'] = event_type
             
             # 2. Add enriched header data (excluding internal tax lists)
-            header_copy = header_data.copy()
             # Remove tax codes and rates since we only want event-level tax codes
-            header_copy.pop("_tax_codes", [])
-            header_copy.pop("_tax_rates", [])
-            normalized_record.update(header_copy)
+            header_copy = header_data.copy()
             
             # 3. Remove the header tax code processing since we only want event-level tax codes
 
             # 4. Add the flattened event data
             # Flatten event data
-            normalized_record.update(flatten_event_data(event_type, event_data))
+            normalized_record.update(flatten_event_data(event_type, event_data, header_copy))
+            header_copy.pop("_tax_codes", [])
+            header_copy.pop("_tax_rates", [])
+            normalized_record.update(header_copy)
             
             # 5. Add remaining metadata
             normalized_record['filename'] = original_filename
