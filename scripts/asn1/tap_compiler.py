@@ -234,7 +234,7 @@ def flatten_event_data(event_type, event_data, header_data):
 
         basicServiceUsedList = get_nested(event_data, "basicServiceUsedList", default={})
         for service in basicServiceUsedList:
-            flat_data["serviceCode"] = get_nested(service, "basicService", "serviceCode","teleServiceCode")
+            flat_data["teleServiceCode"] = get_nested(service, "basicService", "serviceCode","teleServiceCode")
             charge_info_list = get_nested(service, "chargeInformationList", default=[])
             if charge_info_list:
                 charge_info = charge_info_list[0]
