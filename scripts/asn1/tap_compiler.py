@@ -340,8 +340,8 @@ def flatten_event_data(event_type, event_data, header_data):
                         #         flat_data[display_name] = str(tax_value) if tax_value is not None else None
                         
                         # Also keep taxableAmount if charge_value exists
-                        if charge_value is not None:
-                            flat_data['taxableAmount'] = charge_value
+                    if charge_value is not None:
+                        flat_data['taxableAmount'] = charge_value
 
     # Remove keys with None values before returning, but preserve important fields like IMEI
     preserved_fields = ['imei', 'imsi', 'msisdn']  # Fields that should be preserved even if None
