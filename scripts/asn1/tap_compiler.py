@@ -224,6 +224,7 @@ def flatten_event_data(event_type, event_data, header_data):
         
         flat_data.update({
             "calledNumber": decode_tbcd(get_nested(basic_info, "destination", "calledNumber")),
+            "callingNumber": decode_tbcd(get_nested(basic_info, "callOriginator", "callingNumber")),
             "dialledDigits": get_nested(basic_info, "destination", "dialledDigits"),
             "sMSDestinationNumber": get_nested(basic_info, "destination", "sMSDestinationNumber"),
             "totalCallEventDuration": get_nested(basic_info, "totalCallEventDuration"),
@@ -245,6 +246,7 @@ def flatten_event_data(event_type, event_data, header_data):
                 charge_value = charge_detail.get('charge')
                 flat_data['charge'] = charge_value
                 flat_data['chargeableUnits'] = charge_detail.get('chargeableUnits')
+                flat_data["chargedItem"] = charge_info.get("chargedItem")
 
                 # Flatten tax info using the new required format (taxCode1, taxCode2, etc.)
                 tax_list = get_nested(charge_info, 'taxInformation') or []
@@ -255,9 +257,9 @@ def flatten_event_data(event_type, event_data, header_data):
                     
                     header_tax = header_data.get('_tax_codes', {}).get(int(tax_code), {})
                     tax_rate = header_tax.get('taxRate')
-                    flat_data['taxCode'+tax_code] = tax_code
+                    flat_data['taxCode'+tax_code] = tax_value
                     flat_data['taxrate'+tax_code] = tax_rate
-                    flat_data['taxValue'+tax_code] = tax_value
+                    # flat_data['taxValue'+tax_code] = tax_value
                     
                     # Create the new format: taxCode1, taxCode2 with their corresponding values
                     # if tax_code is not None:
