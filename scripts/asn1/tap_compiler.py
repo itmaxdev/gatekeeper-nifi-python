@@ -308,7 +308,7 @@ def flatten_event_data(event_type, event_data, header_data):
             "locationArea": get_nested(location_info, "locationArea"),
             "cellId": get_nested(location_info, "cellId"),
         })
-        flat_data['event_type'] = event_type
+        # flat_data['event_type'] = event_type
         basicServiceUsedList = get_nested(event_data, "basicServiceUsedList", default={})
         for service in basicServiceUsedList:
             service_info = service
