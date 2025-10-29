@@ -113,6 +113,7 @@ def flatten_event_data(event_type, event_data, header_data):
     chargeable_subscriber_path = []
     equipment_path = []
     start_time_path = []
+    flat_data['eventType'] = event_type
 
     if event_type == "gprsCall":
         chargeable_subscriber_path = [
@@ -184,7 +185,7 @@ def flatten_event_data(event_type, event_data, header_data):
             'dataVolumeIncoming': get_nested(service_used, 'dataVolumeIncoming'),
             'dataVolumeOutgoing': get_nested(service_used, 'dataVolumeOutgoing')
         })
-        flat_data['event_type'] = event_type
+        # flat_data['event_type'] = event_type
         charge_info_list = get_nested(service_used, "chargeInformationList", default=[])
         if charge_info_list:
             charge_info = charge_info_list[0]
@@ -232,7 +233,7 @@ def flatten_event_data(event_type, event_data, header_data):
             "locationArea": get_nested(location_info, "locationArea"),
             "cellId": get_nested(location_info, "cellId")
         })
-        flat_data['event_type'] = event_type
+        # flat_data['event_type'] = event_type
 
         basicServiceUsedList = get_nested(event_data, "basicServiceUsedList", default={})
         for service in basicServiceUsedList:
