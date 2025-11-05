@@ -10,34 +10,15 @@ import math
 # --- NiFi Entry Point ---
 
 VODACOM_PAYMENT_COLUMNS = [
-    "RecordType", "OfferID", "GroupID", "SubscriptionID", "BalanceID", 
-    "OfferEntitlementName", "MSISDN", "IMSI", "SubscriberID", "SubscriberType", 
-    "ChargeType", "RecordOpeningTime", "RecordClosingTime", "SessionID", 
-    "SGSNIPAddress", "MCCMNC", "GGSNAddress", "GGSNChargingID", "APN", 
-    "RatingGroup", "ServiceID", "RATType", "UserLocationInformation", 
-    "MSTimezone", "IsRoaming", "Zone", "CCTime", "CCTotalOctets", 
-    "CCInputOctets", "CCOutputOctets", "TerminationCause", "CounterFinalValue", 
-    "RatedCashValuePreTax", "RatedCashValuePostTax", "UserEquipmentInfoType", 
-    "UserEquipmentInfoValue", "BalanceImpactName", "RequestNumber", "IMEI", 
-    "OtherPartyAddress", "Classification", "DirectionType", "ZoneCalled", 
-    "CCServiceSpecificUnits", "RequestType", "OfferName", "ResultCode", 
-    "VLRID", "GLID", "CarrierID", "RoamingCountry", "AccumulatedInBundle", 
-    "AccumulatedOutBundle", "AccumulatedNotApplied", "AccumulatedUsageBalance", 
-    "AccumulatedChargeBalance", "RatedCashValue", "ChunkSize", "ChunkNumber", 
-    "TaxCode",
-    # Reserved columns (61 to 89)
-    *[f"ReservedColumn{i}" for i in range(61, 90)],
-    # Remaining columns (90 to 123)
-    "GrantedCcTime", "GrantedCcTotalOctets", "GrantedCcInputOctets", 
-    "GrantedCcOutputOctets", "GrantedCcServiceSpecificUnits", "RawUsedCcTime", 
-    "RawUsedCcTotalOctets", "RawUsedCcInputOctets", "RawUsedCcOutputOctets", 
-    "RawUsedCcServiceSpecificUnits", "HuaweiOfferID", "HuaweiOfferName", 
-    "PrimaryOfferID", "Channel", "EntitlementUnitType", "UserSessionID", 
-    "VASCategoryID", "VASContentID", "VASSPID", "VASServiceID", "VASCDRINFO1", 
-    "VASCDRINFO2", "VASCDRINFO3", "VASCDRINFO4", "VASCDRINFO5", "VASCDRINFO6", 
-    "CustomerType", "ISUPLocationNumber", "RecordOpenningTimeHr", 
-    "RecordClosingTimeHr", "RequestedPartyAddress", "GroupOwnerMSISDN", 
-    "CUGID", "UsedUnits"
+    "SerialNo", "EventTimeStamp", "SubscriberID", "MSISDN", "SubscriberType", "TransactionId", 
+    "OperationType", "Amount", "PaymentMode", "PPSEntName", "POSEntName", "PreviousPPSBalance", 
+    "CurrentPPSBalance", "PreviousPOSBalance", "CurrentPOSBalance", "BonusEntId", "LoanFlag", 
+    "LoanRepaymentAmount", "SuppressWorkOrder", "OCS_resultCode", "OCS_resultMessage", "BSS_resultCode", 
+    "BSS_resultMessage", "Direction", "CorrelationID", "PrimaryOfferID", "CustomerType", 
+    "BonusOfferSubscriptionID", "BonusValidity", "ThirdPartyNumber", "LocationInformation", 
+    "VoucherSequenceNo", "VoucherBatchNo", "CurrentUserState", "FirstActiveDate", 
+    "AdjustAccountIndicator", "AdjustAccountBatchNumber", "AdjustAccountNotificationIndicator", 
+    "AdjustAccountSource", "AdjustAccountAdditionalInfo"
 ]
 SUBSCRIBER_TYPE = {
     "1": "Prepaid",
