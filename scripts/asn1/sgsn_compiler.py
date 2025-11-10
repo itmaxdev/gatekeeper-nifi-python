@@ -481,7 +481,7 @@ def map_sgsn_record(record: dict, filename: str) -> dict:
                     # Optionally, include individual volume records
             output['dataVolumeGPRSUplink'] = dataVolumeGPRSUplink
             output['dataVolumeGPRSDownlink'] = dataVolumeGPRSDownlink
-            
+    output.pop('pdpType', None)
     output['operator'] = 'Vodacom'
     output['filename'] = filename
     output['parsed_time'] = datetime.now(timezone.utc).isoformat()

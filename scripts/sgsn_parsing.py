@@ -14,14 +14,14 @@ def decode_raw_sgsn(raw_data, filename):
             # print(f"Decoding BER element of length {len(chunk)} bytes")
             decoded = decode_sgsn_file(chunk)
             pretty = pretty_decode(decoded)
-            mapped_record = map_sgsn_record(pretty)
+            mapped_record = map_sgsn_record(pretty, filename)
             # print(pretty)
             records.append(mapped_record)
         if not records:
             # fallback: try decoding whole blob as single record
             decoded = decode_sgsn_file(raw_data)
             pretty = pretty_decode(decoded)
-            mapped_record = map_sgsn_record(pretty)
+            mapped_record = map_sgsn_record(pretty, filename)
             records.append(mapped_record)
         for record in records:
             print(json.dumps(record, ensure_ascii=False))
