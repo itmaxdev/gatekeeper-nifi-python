@@ -3,6 +3,7 @@ import json
 import argparse
 import os
 import sys
+from datetime import datetime, timezone
 
 
 try:
@@ -197,6 +198,56 @@ def _msisdn_from_bcd_bytes(b: bytes) -> str:
 
 def _pretty_value(key, val):
     # heuristics based on field names and types
+    # print(f"Processing key: {key}, type: {type(val)}")
+    def _parse_ber_tlv(b: bytes):
+        """Parse a single BER TLV element from bytes and return a dict with tag/length/payload.
+
+        Returns None on parse failure. This is a small, forgiving parser that handles
+        single-byte tags and simple multi-byte lengths (and simple long-form tags).
+        """
+        if not isinstance(b, (bytes, bytearray)):
+            return None
+        data = bytes(b)
+        L = len(data)
+        if L < 2:
+            return None
+        i = 0
+        try:
+            tag = data[i]
+            i += 1
+            # handle long-form tag number (0x1f) - consume subsequent tag-number bytes
+            if (tag & 0x1F) == 0x1F:
+                # consume subsequent bytes until bit7 == 0
+                while i < L and (data[i] & 0x80):
+                    i += 1
+                if i < L:
+                    i += 1
+            if i >= L:
+                return None
+            first_len = data[i]
+            i += 1
+            if first_len & 0x80:
+                num_bytes = first_len & 0x7F
+                # indefinite form not supported
+                if num_bytes == 0 or i + num_bytes > L:
+                    return None
+                length = int.from_bytes(data[i:i+num_bytes], 'big')
+                i += num_bytes
+            else:
+                length = first_len
+            if i + length > L:
+                return None
+            payload = data[i:i+length]
+            return {
+                'tag': tag,
+                'tag_class': (tag >> 6) & 0x03,
+                'constructed': bool(tag & 0x20),
+                'tag_number': (tag & 0x1F) if (tag & 0x1F) != 0x1F else 'long',
+                'length': length,
+                'payload': payload,
+            }
+        except Exception:
+            return None
     if isinstance(val, dict):
         return pretty_decode(val)
     if isinstance(val, list):
@@ -243,6 +294,34 @@ def _pretty_value(key, val):
         # chargingCharacteristics is 2 octets: profile + behavior
         if 'chargingcharacteristic' in lname or 'chargingcharacteristics' in lname:
             return _charging_characteristics_to_dict(bytes(val))
+        # recordSequenceNumber often contains an embedded BER TLV (tag/len/value)
+        # e.g. 0x960d + ASCII payload -> tag [22] context-specific with string payload
+        # if 'recordsequence' in lname or 'recordsequencenumber' in lname:
+        #     parsed = _parse_ber_tlv(bytes(val))
+        #     if parsed is not None:
+        #         pl = parsed.get('payload')
+        #         # If payload is printable ASCII, return it directly
+        #         try:
+        #             if pl and all(0x20 <= b <= 0x7E for b in pl):
+        #                 return pl.decode('ascii')
+        #         except Exception:
+        #             pass
+        #         # If payload is a single- or multi-octet integer, return integer
+        #         try:
+        #             if pl and len(pl) <= 8:
+        #                 # prefer unsigned big-endian
+        #                 return int.from_bytes(pl, 'big')
+        #         except Exception:
+        #             pass
+        #         # otherwise return a small dict describing the TLV
+        #         return {
+        #             'tag': f"0x{parsed['tag']:02x}",
+        #             'tag_class': parsed['tag_class'],
+        #             'constructed': parsed['constructed'],
+        #             'tag_number': parsed['tag_number'],
+        #             'length': parsed['length'],
+        #             'payload_hex': '0x' + parsed['payload'].hex(),
+        #         }
         # servedMSISDN is an AddressString (first octet + TBCD)
         if 'servedmsisdn' in lname or 'msisdn' in lname:
             return _msisdn_from_bcd_bytes(bytes(val))
@@ -262,6 +341,8 @@ def pretty_decode(decoded: dict) -> dict:
     """
     # Normalize top-level CHOICE tuples that asn1tools may return, e.g.
     # ('sgsnPDPRecord', { ... })
+    # print(f"Decoded top-level CHOICE:  {type(decoded)}")
+    # print('--------------------------------')
     if isinstance(decoded, tuple) and len(decoded) == 2 and isinstance(decoded[0], str):
         key, value = decoded
         return {key: _pretty_value(key, value)}
@@ -370,7 +451,7 @@ def iter_ber_elements(data: bytes):
         
 
 
-def map_sgsn_record(record: dict) -> dict:
+def map_sgsn_record(record: dict, filename: str) -> dict:
     """Map a pretty-decoded SGSN record to a normalized flat dictionary."""
     output = {}
     if not isinstance(record, dict):
@@ -380,6 +461,10 @@ def map_sgsn_record(record: dict) -> dict:
         listOfTrafficVolumes = content.pop('listOfTrafficVolumes', [])
         output = content.copy()
         output['recordType'] = record_type
+        
+        chargingCharacteristics = output.pop('chargingCharacteristics', None)
+        if chargingCharacteristics is not None:
+            output['chargingCharacteristic'] = chargingCharacteristics.get('profile_index', None)
     
         # Flatten listOfTrafficVolumes if present
         if isinstance(listOfTrafficVolumes, list):
@@ -396,5 +481,9 @@ def map_sgsn_record(record: dict) -> dict:
                     # Optionally, include individual volume records
             output['dataVolumeGPRSUplink'] = dataVolumeGPRSUplink
             output['dataVolumeGPRSDownlink'] = dataVolumeGPRSDownlink
+            
+    output['operator'] = 'Vodacom'
+    output['filename'] = filename
+    output['parsed_time'] = datetime.now(timezone.utc).isoformat()
     return output
             
