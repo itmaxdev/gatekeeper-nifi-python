@@ -90,13 +90,14 @@ def map_vodacom_clrcdr_columns(df: pl.DataFrame, filename: str) -> pl.DataFrame:
         for p in ("SubscriptionID", "CycleDay", "CorrelationID"):
             row_dict.pop(p, None)
         
+        
         for i in range(1, 11):
             expiryTime = f"ExpiryTimeOfAccountType{i}"
             tmp = f"CleanedAmount{i}"
             accountType = f"AccountType{i}"
-            if row_dict.get(accountType) not in ['BI_CASH_PREPAID','BI_CASH_DISABLE_PAYG_BLOCK']:
-                tmpAmount = parse_amount(tmp, row.pop(tmp, None))
-                row_dict = {**row_dict, **tmpAmount}
+            # if row_dict.get(accountType) not in ['BI_CASH_PREPAID','BI_CASH_DISABLE_PAYG_BLOCK']:
+            tmpAmount = parse_amount(tmp, row.pop(tmp, None))
+            row_dict = {**row_dict, **tmpAmount}
             row_dict[expiryTime] = parse_date(row.pop(expiryTime, None))
 
         # Convert any remaining datetime objects to ISO 8601

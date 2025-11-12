@@ -5,7 +5,14 @@ import os
 import sys
 from datetime import datetime, timezone
 
+from asn1.direct_binary_parser import DirectBinaryParser
 
+def fetch_missing_fields(binary_data, filename):
+    parser = DirectBinaryParser(show_tbcd_steps=False)
+    
+    results = parser.scan_file(filename, binary_data)
+
+    return results
 try:
     # Try with different compiler options to handle indefinite length better
     # Use the sgsn_cdr_schema.asn from the schema folder
@@ -19,6 +26,220 @@ except Exception as e:
     print("Please ensure the schema file is correct and contains valid ASN.1 definitions.")
     exit()
     
+
+def convert_indefinite_to_definite_length(data):
+    """
+    Convert indefinite length BER encoding to definite length.
+    Also unwraps SEQUENCE and CONTEXT wrappers to get to the actual CallEventRecord.
+    This helps with ASN.1 libraries that don't handle indefinite length well.
+    Uses proper BER tag-length-value parsing to handle nested structures.
+    """
+    # First, unwrap any SEQUENCE (0x30) and CONTEXT (0xA0) wrappers
+    current_data = data
+    unwrap_count = 0
+    
+    while (len(current_data) > 2 and 
+           current_data[0] in [0x30, 0xA0] and 
+           unwrap_count < 3):  # Prevent infinite loop
+        
+        tag = current_data[0]
+        length_octet = current_data[1]
+        
+        # Parse length to find content
+        if (length_octet & 0x80) == 0:
+            # Short form
+            content_start = 2
+        else:
+            # Long form or indefinite
+            num_length_octets = length_octet & 0x7f
+            if num_length_octets == 0:
+                # Indefinite length - find End-of-Contents
+                content_start = 2
+                # We'll handle this in the main conversion below
+                break
+            else:
+                content_start = 2 + num_length_octets
+        
+        # Skip to the content (unwrap this layer)
+        current_data = current_data[content_start:]
+        unwrap_count += 1
+        
+        # print(f"DEBUG: Unwrapped {tag:02x} wrapper, now have: {current_data[:10].hex()}")
+    
+    # Now handle the tag 80 case (CONTEXT[0] IMPLICIT)
+    if len(current_data) > 0 and current_data[0] == 0x80:
+        # print("DEBUG: Converting CONTEXT[0] (0x80) to sgsnPDPRecord (0xB4)")
+        
+        # Extract the original content
+        length_octet = current_data[1]
+        if (length_octet & 0x80) == 0:
+            content_start = 2
+            content_length = length_octet
+        else:
+            num_length_octets = length_octet & 0x7f
+            content_start = 2 + num_length_octets
+            content_length = int.from_bytes(current_data[2:content_start], 'big')
+        
+        original_content = current_data[content_start:content_start + content_length]
+        # print(f"DEBUG: Original content: {original_content.hex()}")
+        
+        # Add recordType field (tag 80, length 1, value 18 = sgsnPDPRecord)
+        recordtype_field = bytes([0x80, 0x01, 0x12])
+        new_content = recordtype_field + original_content
+        new_length = len(new_content)
+        
+        # Build new record with B4 tag
+        new_record = bytearray([0xB4])  # sgsnPDPRecord tag
+        
+        # Add new length
+        if new_length < 0x80:
+            new_record.append(new_length)
+        else:
+            length_bytes = []
+            temp_length = new_length
+            while temp_length > 0:
+                length_bytes.insert(0, temp_length & 0xFF)
+                temp_length >>= 8
+            new_record.append(0x80 | len(length_bytes))
+            new_record.extend(length_bytes)
+        
+        # Add content (recordType + original content)
+        new_record.extend(new_content)
+        
+        current_data = bytes(new_record)
+        # print(f"DEBUG: After adding recordType: {current_data[:15].hex()}")
+        
+        # Check if this is a minimal record format
+        if len(original_content) < 20:  # Too small for complete sgsnPDPRecord
+            # print(f"DEBUG: Minimal record detected ({len(original_content)} bytes)")
+            # print("DEBUG: This file uses proprietary CDR format, not standard ASN.1")
+            # print("DEBUG: Raising special exception to skip ASN.1 for entire file")
+            # Raise a special exception to indicate proprietary format
+            raise ValueError("PROPRIETARY_FORMAT_DETECTED")
+    
+    # Now convert indefinite lengths to definite lengths
+    result = bytearray()
+    offset = 0
+    
+    def find_end_of_contents(data, start_pos, nesting_level=0):
+        """Find the matching End-of-Contents for indefinite length, 
+        handling nesting"""
+        pos = start_pos
+        current_nesting = nesting_level
+        
+        while pos < len(data) - 1:
+            if data[pos] == 0x00 and data[pos + 1] == 0x00:
+                if current_nesting == 0:
+                    return pos  # Found the matching End-of-Contents
+                else:
+                    current_nesting -= 1  # This closes a nested indefinite length
+                    pos += 2
+                    continue
+            
+            # Check if this starts a new indefinite length structure
+            if pos + 1 < len(data) and data[pos + 1] == 0x80:
+                current_nesting += 1
+                pos += 2
+                continue
+            
+            # Skip over this TLV
+            if pos + 1 >= len(data):
+                break
+                
+            length_octet = data[pos + 1]
+            if (length_octet & 0x80) == 0:
+                # Short form
+                tlv_length = 2 + length_octet
+            else:
+                # Long form
+                num_length_octets = length_octet & 0x7f
+                if num_length_octets == 0:
+                    # Another indefinite length
+                    pos += 2
+                    continue
+                    
+                if pos + 2 + num_length_octets >= len(data):
+                    break
+                    
+                value_length = int.from_bytes(
+                    data[pos + 2:pos + 2 + num_length_octets], 'big'
+                )
+                tlv_length = 2 + num_length_octets + value_length
+            
+            pos += tlv_length
+        
+        return None  # End-of-Contents not found
+    
+    while offset < len(current_data):
+        if offset + 1 >= len(current_data):
+            result.extend(current_data[offset:])
+            break
+            
+        tag = current_data[offset]
+        length_octet = current_data[offset + 1]
+        
+        # Check if this is indefinite length (0x80)
+        if length_octet == 0x80:
+            # Find the matching End-of-Contents
+            content_start = offset + 2
+            content_end = find_end_of_contents(current_data, content_start, 0)
+            
+            if content_end is None:
+                # If we can't find End-of-Contents, just copy the rest
+                result.extend(current_data[offset:])
+                break
+                
+            # Calculate definite length
+            content_length = content_end - content_start
+            
+            # Write tag
+            result.append(tag)
+            
+            # Write definite length
+            if content_length < 0x80:
+                # Short form
+                result.append(content_length)
+            else:
+                # Long form
+                length_bytes = []
+                temp_length = content_length
+                while temp_length > 0:
+                    length_bytes.insert(0, temp_length & 0xFF)
+                    temp_length >>= 8
+                
+                result.append(0x80 | len(length_bytes))
+                result.extend(length_bytes)
+            
+            # Write content (recursively process in case of nested indefinite length)
+            content = current_data[content_start:content_end]
+            processed_content = convert_indefinite_to_definite_length(content)
+            result.extend(processed_content)
+            
+            # Skip past the End-of-Contents
+            offset = content_end + 2
+        else:
+            # Regular definite length - copy as is
+            if (length_octet & 0x80) == 0:
+                # Short form
+                record_length = 2 + length_octet
+            else:
+                # Long form
+                num_length_octets = length_octet & 0x7f
+                if offset + 2 + num_length_octets > len(current_data):
+                    result.extend(current_data[offset:])
+                    break
+                    
+                value_length = int.from_bytes(
+                    current_data[offset + 2:offset + 2 + num_length_octets], 'big'
+                )
+                record_length = 2 + num_length_octets + value_length
+            
+            end_pos = min(offset + record_length, len(current_data))
+            result.extend(current_data[offset:end_pos])
+            offset = end_pos
+    
+    return bytes(result)
+
 
 def decode_sgsn_file(raw_data):
     try:
@@ -342,6 +563,7 @@ def pretty_decode(decoded: dict) -> dict:
     # Normalize top-level CHOICE tuples that asn1tools may return, e.g.
     # ('sgsnPDPRecord', { ... })
     # print(f"Decoded top-level CHOICE:  {type(decoded)}")
+    # print(decoded)
     # print('--------------------------------')
     if isinstance(decoded, tuple) and len(decoded) == 2 and isinstance(decoded[0], str):
         key, value = decoded
@@ -357,6 +579,9 @@ def pretty_decode(decoded: dict) -> dict:
             out[k] = _pretty_value(k, v)
         except Exception:
             out[k] = str(v)
+            
+    # print(out)
+    # print(decoded)
     return out
 
 
@@ -417,9 +642,12 @@ def iter_ber_elements(data: bytes):
         i += 1
         # if tag number is 31 (0x1f) long-form, skip subsequent tag bytes
         # (simple handling: consume until a byte with high bit 0)
-        if data[start] & 0x1F == 0x1F:
+        if (data[start] & 0x1F) == 0x1F:
+            # consume subsequent tag-number bytes: they have bit7 set on all
+            # but the last tag-number byte has bit7 == 0, so loop until that
             while i < L and (data[i] & 0x80):
                 i += 1
+            # consume the final tag-number byte (which has bit7 == 0) if present
             if i < L:
                 i += 1
 
@@ -481,7 +709,7 @@ def map_sgsn_record(record: dict, filename: str) -> dict:
                     # Optionally, include individual volume records
             output['dataVolumeGPRSUplink'] = dataVolumeGPRSUplink
             output['dataVolumeGPRSDownlink'] = dataVolumeGPRSDownlink
-    output.pop('pdpType', None)
+            
     output['operator'] = 'Vodacom'
     output['filename'] = filename
     output['parsed_time'] = datetime.now(timezone.utc).isoformat()
