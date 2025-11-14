@@ -408,8 +408,26 @@ class DirectBinaryParser:
                 return None
             
             msisdn_data = data[pos:pos + ctx27_length]
-            decoded_msisdn = self._decode_tbcd(msisdn_data, show_steps=self.show_tbcd_steps)
-            
+            # Prefer the shared utility which is stricter about TBCD padding
+            try:
+                from asn1.utils import decode_tbcd as _util_decode_tbcd
+                decoded_msisdn = _util_decode_tbcd(msisdn_data)
+            except Exception:
+                # Fallback to local implementation if utility not available
+                decoded_msisdn = self._decode_tbcd(msisdn_data, show_steps=self.show_tbcd_steps)
+
+            # If the decoded value is unexpectedly long (likely because we
+            # captured extra bytes), try to heuristically extract a plausible
+            # MSISDN (7-16 digits). Prefer the first reasonable match.
+            if isinstance(decoded_msisdn, str) and len(decoded_msisdn) > 16:
+                import re
+                m = re.search(r"(\d{7,16})", decoded_msisdn)
+                if m:
+                    decoded_msisdn = m.group(1)
+                else:
+                    # As a last resort, truncate to a reasonable max length
+                    decoded_msisdn = decoded_msisdn[:16]
+
             if decoded_msisdn:
                 return {'servedMSISDN': decoded_msisdn}
             
