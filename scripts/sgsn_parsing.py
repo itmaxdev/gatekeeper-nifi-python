@@ -2,6 +2,21 @@ import sys
 import traceback
 from asn1.sgsn_compiler import *
 import bisect
+import json
+
+
+def make_json_serializable(obj):
+    """Recursively convert all bytes objects to hex strings for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(make_json_serializable(item) for item in obj)
+    elif isinstance(obj, (bytes, bytearray)):
+        return '0x' + obj.hex()
+    else:
+        return obj
 
 
 def decode_raw_sgsn(raw_data, filename):
@@ -122,7 +137,8 @@ def decode_raw_sgsn(raw_data, filename):
             mapped_record = map_sgsn_record(pretty)
             records.append(mapped_record)
         for record in records:
-            print(json.dumps(record, ensure_ascii=False))
+            serializable_record = make_json_serializable(record)
+            print(json.dumps(serializable_record, ensure_ascii=False))
         # clear_response = clean_nested(response)
         # normalized_records = normalize_sgsn_file(clear_response, filename, "Vodacom")
         # if normalized_records:

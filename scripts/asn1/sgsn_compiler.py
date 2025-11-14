@@ -572,17 +572,17 @@ def _pretty_value(key, val):
             raw_msisdn = val
         
             # Check if this looks like a clean phone number (from enhanced extraction)
-            # if isinstance(raw_msisdn, str) and raw_msisdn.isdigit() and len(raw_msisdn) >= 10:
-            #     msisdn_value = raw_msisdn
-            # elif raw_msisdn:
-            #     # Fallback to TBCD decoding for binary data
-            #     try:
-            #         decoded_msisdn = decode_tbcd(raw_msisdn)
-            #         if decoded_msisdn and decoded_msisdn.isdigit() and len(decoded_msisdn) >= 10:
-            #             msisdn_value = decoded_msisdn
-            #     except:
-            #         pass
-            return raw_msisdn
+            if isinstance(raw_msisdn, str) and raw_msisdn.isdigit() and len(raw_msisdn) >= 10:
+                msisdn_value = raw_msisdn
+            elif raw_msisdn:
+                # Fallback to TBCD decoding for binary data
+                try:
+                    decoded_msisdn = decode_tbcd(raw_msisdn)
+                    if decoded_msisdn and decoded_msisdn.isdigit() and len(decoded_msisdn) >= 10:
+                        msisdn_value = decoded_msisdn
+                except:
+                    pass
+            return msisdn_value
         # fallback to hex
         return _to_hex(val)
     return val
