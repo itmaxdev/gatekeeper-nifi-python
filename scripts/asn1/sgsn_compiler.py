@@ -4,8 +4,10 @@ import argparse
 import os
 import sys
 from datetime import datetime, timezone
+import string
 
 from asn1.direct_binary_parser import DirectBinaryParser
+from asn1.utils import decode_tbcd
 
 def fetch_missing_fields(binary_data, filename):
     parser = DirectBinaryParser(show_tbcd_steps=False)
@@ -363,6 +365,21 @@ def _to_hex(b: bytes) -> str:
         return '0x' + bytes(b).hex()
     return str(b)
 
+def hex_to_ascii(hex_str):
+    # Remove "0x" prefix if present
+    if hex_str.startswith("0x"):
+        hex_str = hex_str[2:]
+
+    # Convert from hex to bytes, then decode printable ASCII characters
+    bytes_data = bytes.fromhex(hex_str)
+    try:
+        decoded = bytes_data.decode("utf-8", errors="ignore")
+    except UnicodeDecodeError:
+        decoded = bytes_data.decode("latin1", errors="ignore")
+        
+    clean = "".join(ch for ch in decoded if ch in string.printable and ch not in "\r\n\t")
+
+    return clean
 
 def _two_octet_be_to_int(b: bytes):
     if isinstance(b, (bytes, bytearray)) and len(b) == 2:
@@ -517,7 +534,14 @@ def _pretty_value(key, val):
             return _charging_characteristics_to_dict(bytes(val))
         # recordSequenceNumber often contains an embedded BER TLV (tag/len/value)
         # e.g. 0x960d + ASCII payload -> tag [22] context-specific with string payload
-        # if 'recordsequence' in lname or 'recordsequencenumber' in lname:
+        if 'recordsequence' in lname or 'recordsequencenumber' in lname:
+            
+            # if isinstance(val, (bytes, bytearray)):
+            #     record_seq_hex = _to_hex(val)
+            # else:
+            #     record_seq_hex = str(val)
+            record_seq_ascii = hex_to_ascii(val.hex())
+            return record_seq_ascii
         #     parsed = _parse_ber_tlv(bytes(val))
         #     if parsed is not None:
         #         pl = parsed.get('payload')
@@ -545,7 +569,20 @@ def _pretty_value(key, val):
         #         }
         # servedMSISDN is an AddressString (first octet + TBCD)
         if 'servedmsisdn' in lname or 'msisdn' in lname:
-            return _msisdn_from_bcd_bytes(bytes(val))
+            raw_msisdn = val
+        
+            # Check if this looks like a clean phone number (from enhanced extraction)
+            if isinstance(raw_msisdn, str) and raw_msisdn.isdigit() and len(raw_msisdn) >= 10:
+                msisdn_value = raw_msisdn
+            elif raw_msisdn:
+                # Fallback to TBCD decoding for binary data
+                try:
+                    decoded_msisdn = decode_tbcd(raw_msisdn)
+                    if decoded_msisdn and decoded_msisdn.isdigit() and len(decoded_msisdn) >= 10:
+                        msisdn_value = decoded_msisdn
+                except:
+                    pass
+            return msisdn_value
         # fallback to hex
         return _to_hex(val)
     return val
