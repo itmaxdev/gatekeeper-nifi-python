@@ -124,10 +124,10 @@ def decode_raw_sgsn(raw_data, filename):
             except Exception:
                 # non-fatal merging errors should not stop processing
                 pass
-
+            
             # print(mapped_record)
             # exit(0)
-
+            mapped_record.pop('localSequenceNumber', None)
             records.append(mapped_record)
         if not records:
             # fallback: try decoding whole blob as single record
