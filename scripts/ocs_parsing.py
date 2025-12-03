@@ -145,7 +145,7 @@ def map_vodacom_cdr_columns(df, filename):
             "MSISDN": to_str(row.get("MSISDN")),
             "IMSI": to_str(row.get("IMSI")),
             "SubscriberTypeCode": to_str(row.get("SubscriberType")),
-            "SubscriberType": to_str(SUBSCRIBER_TYPE.get(row.get("SubscriberType"), "Unknown")),
+            "SubscriberType": to_str(SUBSCRIBER_TYPE.get(row.get("SubscriberType"), "Prepaid")),
             "IsCharged": to_str(row.get("ChargeType") == "0"),
             "SGSNIPAddress": to_str(row.get("SGSNIPAddress")),
             "GGSNAddress": to_str(row.get("GGSNAddress")),
